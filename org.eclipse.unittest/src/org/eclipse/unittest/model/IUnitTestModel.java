@@ -75,9 +75,7 @@ public interface IUnitTestModel {
 	 * Creates an {@link ITestRunSession}
 	 *
 	 * @param launch an {@link ILaunch} to start a test run session
-	 * @param port   a port number to listen during the run of remote test runner or
-	 *               <code>-1</code> in case of a local test runner
 	 * @return a created {@link ITestRunSession} instance
 	 */
-	ITestRunSession createTestRunSession(ILaunch launch, int port);
+	ITestRunSession createTestRunSession(ILaunch launch);
 }

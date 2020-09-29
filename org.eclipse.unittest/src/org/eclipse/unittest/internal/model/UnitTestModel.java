@@ -43,8 +43,6 @@ import org.xml.sax.SAXException;
 import org.eclipse.unittest.TestRunListener;
 import org.eclipse.unittest.UnitTestPlugin;
 import org.eclipse.unittest.internal.UnitTestPreferencesConstants;
-import org.eclipse.unittest.launcher.ITestRunnerClient;
-import org.eclipse.unittest.launcher.RemoteTestRunnerClient;
 import org.eclipse.unittest.launcher.UnitTestLaunchConfigurationConstants;
 import org.eclipse.unittest.model.ITestRunSession;
 import org.eclipse.unittest.model.ITestRunSessionListener;
@@ -82,19 +80,6 @@ public final class UnitTestModel implements IUnitTestModel {
 
 		@Override
 		public void launchAdded(ILaunch launch) {
-			fTrackedLaunches.add(launch);
-		}
-
-		@Override
-		public void launchRemoved(final ILaunch launch) {
-			fTrackedLaunches.remove(launch);
-		}
-
-		@Override
-		public void launchChanged(final ILaunch launch) {
-			if (!fTrackedLaunches.contains(launch))
-				return;
-
 			ILaunchConfiguration config = launch.getLaunchConfiguration();
 			if (config == null)
 				return;
@@ -108,47 +93,33 @@ public final class UnitTestModel implements IUnitTestModel {
 				return;
 			}
 
-			// This testRunnerViewSupport and testRunnerClient instances are not retained
-			// (just
-			// there for testing)
-			// so it's ok instantiating them.
 			ITestViewSupport testRunnerViewSupport = UnitTestLaunchConfigurationConstants
 					.newTestRunnerViewSupport(config);
-			ITestRunnerClient testRunnerClient = testRunnerViewSupport != null
-					? testRunnerViewSupport.getTestRunnerClient()
-					: null;
-
-			// If a Remote Test Runner Client exists try to create a new Test Run Session,
-			// connect the Remote Test Runner and listen it
-			// Otherwize, it is expected that the Test Runner Process will be created
-			// through
-			// <pre><code>org.eclipse.debug.core.processFactories</code></pre> extension
-			// point
-			// and the factory will take care of creating the Test Run Session.
-			//
-			if (testRunnerClient instanceof RemoteTestRunnerClient) {
-				String portStr = launch.getAttribute(UnitTestLaunchConfigurationConstants.ATTR_PORT);
-				if (portStr == null)
-					return;
-				try {
-					final int port = Integer.parseInt(portStr);
-					fTrackedLaunches.remove(launch);
-					connectTestRunner(launch, port);
-				} catch (NumberFormatException e) {
-					UnitTestPlugin.log(e);
-					return;
-				}
+			if (testRunnerViewSupport == null) {
+				return;
 			}
+
+			fTrackedLaunches.add(launch);
 		}
 
-		private void connectTestRunner(ILaunch launch, int port) {
-			TestRunSession testRunSession = new TestRunSession(launch, port);
-			addTestRunSession(testRunSession);
+		@Override
+		public void launchRemoved(final ILaunch launch) {
+			fTrackedLaunches.remove(launch);
+		}
 
+		@Override
+		public void launchChanged(final ILaunch launch) {
+			if (!fTrackedLaunches.contains(launch))
+				return;
+
+
+			TestRunSession testRunSession = new TestRunSession(launch);
+			addTestRunSession(testRunSession);
 			for (TestRunListener listener : UnitTestPlugin.getDefault().getUnitTestRunListeners()) {
 				listener.sessionLaunched(testRunSession);
 			}
 		}
+
 	}
 
 	private final ListenerList<ITestRunSessionListener> fTestRunSessionListeners = new ListenerList<>();
@@ -487,8 +458,8 @@ public final class UnitTestModel implements IUnitTestModel {
 	}
 
 	@Override
-	public ITestRunSession createTestRunSession(ILaunch launch, int port) {
-		return new TestRunSession(launch, port);
+	public ITestRunSession createTestRunSession(ILaunch launch) {
+		return new TestRunSession(launch);
 	}
 
 	private static final String HISTORY_DIR_NAME = "history"; //$NON-NLS-1$
