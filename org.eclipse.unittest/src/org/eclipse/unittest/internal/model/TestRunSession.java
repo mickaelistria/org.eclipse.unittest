@@ -13,9 +13,7 @@
  *******************************************************************************/
 package org.eclipse.unittest.internal.model;
 
-import java.io.File;
 import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -35,7 +33,6 @@ import org.eclipse.unittest.model.ITestSuiteElement;
 import org.eclipse.unittest.ui.ITestViewSupport;
 
 import org.eclipse.core.runtime.Assert;
-import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.ISafeRunnable;
 import org.eclipse.core.runtime.ListenerList;
 import org.eclipse.core.runtime.SafeRunner;
@@ -56,6 +53,7 @@ public class TestRunSession extends TestSuiteElement implements ITestRunSession,
 	 * The launch, or <code>null</code> iff this session was run externally.
 	 */
 	private final ILaunch fLaunch;
+	private final ILaunchConfiguration launchConfiguration;
 	private final String fTestRunName;
 	private final ITestViewSupport fTestRunnerSupport;
 
@@ -95,9 +93,10 @@ public class TestRunSession extends TestSuiteElement implements ITestRunSession,
 	/**
 	 * Creates a test run session.
 	 *
-	 * @param testRunName name of the test run
+	 * @param testRunName         name of the test run
+	 * @param launchConfiguration
 	 */
-	public TestRunSession(String testRunName) {
+	public TestRunSession(String testRunName, Instant startTime, ILaunchConfiguration launchConfiguration) {
 		super(null, "-1", testRunName, null, null, null); //$NON-NLS-1$
 		// TODO: check assumptions about non-null fields
 
@@ -110,6 +109,8 @@ public class TestRunSession extends TestSuiteElement implements ITestRunSession,
 		fIdToTest = new HashMap<>();
 
 		fTestRunnerClient = null;
+		fStartTime = startTime;
+		this.launchConfiguration = launchConfiguration;
 
 		fSessionListeners = new ListenerList<>();
 	}
@@ -120,7 +121,7 @@ public class TestRunSession extends TestSuiteElement implements ITestRunSession,
 
 		fLaunch = launch;
 
-		ILaunchConfiguration launchConfiguration = launch.getLaunchConfiguration();
+		launchConfiguration = launch.getLaunchConfiguration();
 		if (launchConfiguration != null) {
 			fTestRunName = launchConfiguration.getName();
 			fTestRunnerSupport = UnitTestModel.newTestRunnerViewSupport(launchConfiguration);
@@ -217,6 +218,10 @@ public class TestRunSession extends TestSuiteElement implements ITestRunSession,
 		return fLaunch;
 	}
 
+	public ILaunchConfiguration getLaunchConfiguration() {
+		return launchConfiguration;
+	}
+
 	@Override
 	public String getTestRunName() {
 		return fTestRunName;
@@ -235,11 +240,6 @@ public class TestRunSession extends TestSuiteElement implements ITestRunSession,
 	@Override
 	public int getCurrentAssumptionFailureCount() {
 		return getChildren().stream().mapToInt(TestElement::getCurrentAssumptionFailureCount).sum();
-	}
-
-	@Override
-	public int getCurrentStartedCount() {
-		return getChildren().stream().mapToInt(TestElement::getCurrentStartedCount).sum();
 	}
 
 	@Override
@@ -270,62 +270,9 @@ public class TestRunSession extends TestSuiteElement implements ITestRunSession,
 		fSessionListeners.remove(listener);
 	}
 
-	public synchronized void swapOut() {
-		if (isRunning() || isStarting()) {
-			return;
-		}
-
-		for (ITestSessionListener registered : fSessionListeners) {
-			if (!registered.acceptsSwapToDisk()) {
-				return;
-			}
-		}
-
-		try {
-			File swapFile = getSwapFile();
-
-			UnitTestModel.exportTestRunSession(this, swapFile);
-			fTestRunnerClient = null;
-			fIdToTest = new HashMap<>();
-			fIncompleteTestSuites.clear();
-			fFactoryTestSuites.clear();
-			getChildren().clear();
-		} catch (IllegalStateException e) {
-			UnitTestPlugin.log(e);
-		} catch (CoreException e) {
-			UnitTestPlugin.log(e);
-		}
-	}
-
 	@Override
 	public boolean isStarting() {
 		return getStartTime() == null && fLaunch != null && !fLaunch.isTerminated();
-	}
-
-	public void removeSwapFile() {
-		File swapFile = getSwapFile();
-		if (swapFile.exists()) {
-			swapFile.delete();
-		}
-	}
-
-	private File getSwapFile() {
-		File historyDir = UnitTestModel.getHistoryDirectory();
-		String isoTime = new SimpleDateFormat("yyyyMMdd-HHmmss.SSS").format(new Date(getStartTime().toEpochMilli())); //$NON-NLS-1$
-		String swapFileName = isoTime + ".xml"; //$NON-NLS-1$
-		return new File(historyDir, swapFileName);
-	}
-
-	public synchronized void swapIn() {
-		if (!getChildren().isEmpty())
-			return;
-
-		try {
-			UnitTestModel.importIntoTestRunSession(getSwapFile(), this);
-		} catch (IllegalStateException | CoreException e) {
-			UnitTestPlugin.log(e);
-			fTestResult = null;
-		}
 	}
 
 	public void abortTestRun() {
@@ -709,4 +656,5 @@ public class TestRunSession extends TestSuiteElement implements ITestRunSession,
 	public Result getTestResult(boolean includeChildren) {
 		return this.fTestResult != null ? this.fTestResult : super.getTestResult(includeChildren);
 	}
+
 }
